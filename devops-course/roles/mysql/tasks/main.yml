@@ -1,0 +1,94 @@
+---
+- name: Download MySQL community repository RPM
+  command: curl -s -o /tmp/mysql80-community-release-el9-1.noarch.rpm -L https://repo.mysql.com/mysql80-community-release-el9-1.noarch.rpm
+  args:
+    creates: /tmp/mysql80-community-release-el9-1.noarch.rpm
+
+- name: Install MySQL 8.0 community repository RPM
+  dnf:
+    name: /tmp/mysql80-community-release-el9-1.noarch.rpm
+    state: present
+    disable_gpg_check: yes
+
+- name: Install MySQL server and python3-pip dependencies
+  dnf:
+    name:
+      - mysql-community-server
+      - python3-pip
+    state: present
+    disable_gpg_check: yes
+
+- name: Install PyMySQL via pip for Ansible mysql modules
+  pip:
+    name: pymysql
+    state: present
+
+- name: Create persistent MySQL data directory
+  file:
+    path: "{{ mysql_datadir }}"
+    state: directory
+    owner: mysql
+    group: mysql
+    mode: '0750'
+
+- name: Deploy MySQL configuration file
+  copy:
+    content: |
+      [mysqld]
+      datadir={{ mysql_datadir }}
+      socket=/var/lib/mysql/mysql.sock
+      lower_case_table_names=1
+      bind-address={{ mysql_bind_address }}
+      port={{ mysql_port }}
+
+      log-error=/var/log/mysqld.log
+      pid-file=/var/run/mysqld/mysqld.pid
+    dest: /etc/my.cnf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Check if MySQL is already initialized
+  stat:
+    path: "{{ mysql_datadir }}/mysql"
+  register: mysql_init_status
+
+- name: Initialize MySQL database in-securely
+  command: mysqld --initialize-insecure --user=mysql --datadir={{ mysql_datadir }}
+  when: not mysql_init_status.stat.exists
+
+- name: Start and enable MySQL service
+  service:
+    name: mysqld
+    state: started
+    enabled: yes
+
+- name: Create fsm_db database
+  community.mysql.mysql_db:
+    name: "{{ mysql_db_name }}"
+    state: present
+    login_unix_socket: /var/lib/mysql/mysql.sock
+
+- name: Create fsm_db schema tables
+  community.mysql.mysql_query:
+    login_db: "{{ mysql_db_name }}"
+    query: |
+      CREATE TABLE IF NOT EXISTS students (
+        student_id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100),
+        city VARCHAR(50),
+        addr VARCHAR(200),
+        pin VARCHAR(10),
+        phone VARCHAR(20)
+      );
+    login_unix_socket: /var/lib/mysql/mysql.sock
+
+- name: Create flaskapp database user with remote access
+  community.mysql.mysql_user:
+    name: "{{ mysql_app_user }}"
+    password: "{{ pass }}"
+    host: "%"
+    priv: "{{ mysql_db_name }}.*:ALL"
+    state: present
+    login_unix_socket: /var/lib/mysql/mysql.sock
+
