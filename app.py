@@ -12,12 +12,14 @@ class Students(db.Model):  # Corrected class name and capitalization
     city = db.Column(db.String(50))  # Corrected column type and spelling
     addr = db.Column(db.String(200))  # Corrected column type and spelling
     pin = db.Column(db.String(10))  # Corrected column type and spelling
+    phone = db.Column(db.String(20))  # Added phone number field
 
-    def __init__(self, name, city, addr, pin):
+    def __init__(self, name, city, addr, pin, phone):
         self.name = name
         self.city = city
         self.addr = addr
         self.pin = pin
+        self.phone = phone
 
 @app.route('/')
 def show_all():
@@ -26,14 +28,15 @@ def show_all():
 @app.route('/new', methods=['GET', 'POST'])
 def new():
     if request.method == 'POST':
-        if not request.form['name'] or not request.form['city'] or not request.form['addr']:
+        if not request.form['name'] or not request.form['city'] or not request.form['addr'] or not request.form['phone']:
             flash('Please enter all the fields', 'error')
         else:
             student = Students(
                 request.form['name'],
                 request.form['city'],
                 request.form['addr'],
-                request.form['pin']
+                request.form['pin'],
+                request.form['phone']
             )
             db.session.add(student)
             db.session.commit()  # Fixed typo in commit
