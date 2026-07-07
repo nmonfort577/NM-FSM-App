@@ -27,7 +27,7 @@ source "amazon-ebs" "mysql" {
   security_group_id           = "sg-03639ecb8a67176d0"
   subnet_id                   = "subnet-0f8d022ffb51970a0"
   ami_name                    = local.ami_name
-  associate_public_ip_address = false
+  associate_public_ip_address = true
   tags                        = { Name = local.ami_name, BuiltBy = "packer", Module = "mysql" }
 }
 
