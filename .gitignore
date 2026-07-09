@@ -2,3 +2,10 @@ venv/
 *.log
 __pycache__/
 instance/*.bak
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan.bin
