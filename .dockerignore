@@ -1,0 +1,36 @@
+# .dockerignore
+# Python environment — never include the venv in the image
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# SQLite dev database — images are stateless
+*.db
+*.sqlite3
+instance/
+
+# Sensitive and environment-specific files
+.env
+.env.*
+*.tfvars
+
+# Terraform — no infrastructure code in the app image
+.terraform/
+*.tfstate
+*.tfstate.backup
+terraform.tfstate*
+
+# Git history — not needed in the image
+.git/
+.gitignore
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Documentation
+*.md
+docs/
