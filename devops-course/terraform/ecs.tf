@@ -1,4 +1,5 @@
 # ecs.tf
+
 resource "aws_ecs_cluster" "main" {
   name = "cis4641-cluster"
   setting {
@@ -6,6 +7,7 @@ resource "aws_ecs_cluster" "main" {
     value = "enabled"
   }
 }
+
 resource "aws_ecs_service" "app" {
   name            = "flask-${terraform.workspace}"
   cluster         = aws_ecs_cluster.main.id
@@ -13,10 +15,22 @@ resource "aws_ecs_service" "app" {
   desired_count   = 1
   launch_type     = "FARGATE"
   network_configuration {
-    subnets          = [aws_subnet.private.id]
+    subnets          = [data.aws_subnet.public.id]
     security_groups  = [aws_security_group.fargate.id]
     assign_public_ip = true
   }
+}
+
+resource "aws_ecr_repository" "flask_app" {
+  name                 = "nm-fsm-app"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+  tags                 = { Name = "nm-fsm-app" }
+}
+
+resource "aws_cloudwatch_log_group" "ecs" {
+  name              = "/ecs/flask-${terraform.workspace}"
+  retention_in_days = 7
 }
 resource "aws_ecs_task_definition" "app" {
   family                   = "flask-${terraform.workspace}"
@@ -26,13 +40,16 @@ resource "aws_ecs_task_definition" "app" {
   memory                   = "512"
   execution_role_arn       = data.aws_iam_role.lab.arn
   container_definitions = jsonencode([{
-    name         = "flask-app"
-    image        = "${aws_ecr_repository.flask_app.repository_url}:latest"
-    portMappings = [{ containerPort = 5000, protocol = "tcp" }]
-    environment = [
-      { name = "DATABASE_URL"
-      value = "mysql+pymysql://${var.db_user}:${var.db_password}@${var.db_ip[terraform.workspace]}/${var.db_name}" }
-    ]
+    name  = "flask-app"
+    image = "${aws_ecr_repository.flask_app.repository_url}:${var.flask_image_tag}"
+    portMappings = [{
+      containerPort = 5000
+      protocol      = "tcp"
+    }]
+    environment = [{
+      name  = "DATABASE_URL"
+      value = "mysql+pymysql://${var.db_user}:${var.db_password}@${var.db_ip[terraform.workspace]}/${var.db_name}"
+    }]
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -42,10 +59,4 @@ resource "aws_ecs_task_definition" "app" {
       }
     }
   }])
-}
-resource "aws_ecr_repository" "flask_app" {
-  name                 = "nm-fsm-app"
-  image_tag_mutability = "MUTABLE"
-  force_delete         = true # allows destroy even with images
-  tags                 = { Name = "nm-fsm-app" }
 }

@@ -36,3 +36,8 @@ variable "db_password" {
   type      = string
   sensitive = true
 }
+# -- Docker image tag (overridden in Module 5 via -var) --
+variable "flask_image_tag" {
+  type    = string
+  default = "latest"
+}
