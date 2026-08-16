@@ -1,0 +1,15 @@
+---
+- name: Configure MySQL database servers
+  hosts: dbservers
+  become: true
+  vars_files:
+    - vault.yml
+  pre_tasks:
+    - name: Install required Ansible collections (community.mysql)
+      ansible.builtin.command:
+        cmd: ansible-galaxy collection install community.mysql
+      delegate_to: localhost
+      run_once: true
+      changed_when: false
+  roles:
+    - mysql

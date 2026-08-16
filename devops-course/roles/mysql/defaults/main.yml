@@ -1,0 +1,15 @@
+---
+# MySQL 8.4 community repo RPM
+# NOTE: dev.mysql.com returns 403 for repo RPMs - use repo.mysql.com (see AGENTS.md).
+# NOTE: MySQL download server blocks standard Python/Ansible User-Agents.
+#       curl is used with a browser-like User-Agent string instead (see AGENTS.md).
+mysql_repo_url: "https://repo.mysql.com/mysql84-community-release-el9-1.noarch.rpm"
+mysql_repo_rpm: "/tmp/mysql84-community-release-el9-1.noarch.rpm"
+
+# MySQL unix socket (used for local root auth; independent of datadir)
+mysql_socket: /var/lib/mysql/mysql.sock
+
+# Root password set on first launch (after --initialize-insecure).
+# community.mysql modules do NOT read /root/.my.cnf automatically;
+# login_password must be passed explicitly.
+mysql_root_password: "MySQLR00t_Secret!"

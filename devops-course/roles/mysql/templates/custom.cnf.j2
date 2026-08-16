@@ -1,0 +1,12 @@
+[mysqld]
+port                   = {{ mysql_port }}
+bind-address           = {{ mysql_bind_address }}
+datadir                = {{ mysql_datadir }}
+socket                 = {{ mysql_socket }}
+
+# Eliminates Windows/Linux case mismatch; MUST be set before --initialize
+lower_case_table_names = 1
+
+# Logging
+log-error              = /var/log/mysqld.log
+pid-file               = /var/run/mysqld/mysqld.pid
