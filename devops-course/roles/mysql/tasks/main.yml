@@ -77,36 +77,41 @@
     state: started
     enabled: true
 
+- name: Wait for mysqld socket to be ready
+  ansible.builtin.wait_for:
+    path: "{{ mysql_socket }}"
+    state: present
+    delay: 2
+    timeout: 60
+
+- name: Set MySQL root password
+  ansible.builtin.shell: |
+    # 1. Try connecting with blank password
+    if mysql -u root -S {{ mysql_socket }} -e "SELECT 1" >/dev/null 2>&1; then
+        mysql -u root -S {{ mysql_socket }} -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}';"
+        exit 0
+    fi
+    # 2. Extract generated temporary password from mysqld.log
+    TEMP_PASS=$(grep -i "temporary password" /var/log/mysqld.log | awk '{print $NF}' | tail -1)
+    if [ -n "$TEMP_PASS" ]; then
+        mysql -u root -p"$TEMP_PASS" --connect-expired-password -S {{ mysql_socket }} \
+          -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}';"
+        exit 0
+    fi
+    # 3. Check if password is already set
+    if mysql -u root -p'{{ mysql_root_password }}' -S {{ mysql_socket }} -e "SELECT 1" >/dev/null 2>&1; then
+        exit 0
+    fi
+    echo "Could not authenticate as root"
+    exit 1
+  when: not mysql_data_initialized.stat.exists  
+
 - name: Wait for mysqld to accept connections on port {{ mysql_port }}
   ansible.builtin.wait_for:
     host: 127.0.0.1
     port: "{{ mysql_port }}"
     delay: 3
     timeout: 60
-
-# ─── 5. Root Password Setup (idempotent) ──────────────────────────────────
-# community.mysql modules do NOT read /root/.my.cnf automatically.
-# We must set a real root password and pass login_password explicitly.
-# Strategy: check if root can connect with empty password (post-initialize-insecure
-# state). If yes, set the password now. On subsequent runs the check fails and
-# this task is skipped — fully idempotent.
-
-- name: Check if MySQL root still has empty password (post-initialize-insecure)
-  ansible.builtin.command:
-    cmd: mysql -u root --password='' -S {{ mysql_socket }} -e "SELECT 1"
-  register: mysql_empty_pass_check
-  ignore_errors: true
-  changed_when: false
-  no_log: true
-
-- name: Set MySQL root password (first launch only)
-  ansible.builtin.command:
-    cmd: >
-      mysql -u root --password='' -S {{ mysql_socket }}
-      -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}';"
-  when: mysql_empty_pass_check.rc == 0
-  changed_when: mysql_empty_pass_check.rc == 0
-  no_log: true
 
 # ─── 6. Root Client Authentication File ───────────────────────────────────
 
