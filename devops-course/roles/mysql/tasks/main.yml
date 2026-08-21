@@ -1,0 +1,182 @@
+---
+# ─── 1. Repository & Package Installation ──────────────────────────────────
+
+- name: Download MySQL 8.4 community repo RPM to /tmp
+  # NOTE: MySQL download server blocks standard Python/Ansible User-Agents (see AGENTS.md).
+  #       Using curl with a browser-like UA. 'creates' makes this idempotent.
+  # NOTE: Installing repo from /tmp to avoid DNF home directory restrictions (see AGENTS.md).
+  ansible.builtin.command:
+    cmd: >
+      curl -fsSL
+      -A "Mozilla/5.0 (compatible; Ansible)"
+      -o {{ mysql_repo_rpm }}
+      {{ mysql_repo_url }}
+    creates: "{{ mysql_repo_rpm }}"
+
+- name: Install MySQL 8.4 community repository
+  ansible.builtin.dnf:
+    name: "{{ mysql_repo_rpm }}"
+    state: present
+    disable_gpg_check: true
+
+- name: Install mysql-community-server and python3-pip
+  ansible.builtin.dnf:
+    name:
+      - mysql-community-server
+      - python3-pip
+    state: present
+
+- name: Install PyMySQL via pip
+  # NOTE: Amazon Linux 2023 does not ship python3-pymysql in its repos (see AGENTS.md).
+  ansible.builtin.pip:
+    name: PyMySQL
+    state: present
+
+# ─── 2. Data Directory & Configuration ────────────────────────────────────
+# IMPORTANT: Configuration (lower_case_table_names=1, datadir, port, bind-address)
+# MUST be written before mysqld --initialize is called. Changing these settings
+# after initialization requires a full data directory rebuild.
+
+- name: Create MySQL data directory
+  ansible.builtin.file:
+    path: "{{ mysql_datadir }}"
+    state: directory
+    owner: mysql
+    group: mysql
+    mode: '0750'
+
+- name: Deploy MySQL server configuration
+  ansible.builtin.template:
+    src: custom.cnf.j2
+    dest: /etc/my.cnf.d/custom.cnf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart mysqld
+
+# ─── 3. Idempotent First-Launch Detection & Initialization ────────────────
+
+- name: Check if MySQL data directory is already initialized
+  # The presence of the 'mysql' system schema directory signals a completed init.
+  ansible.builtin.stat:
+    path: "{{ mysql_datadir }}/mysql"
+  register: mysql_data_initialized
+
+- name: Initialize MySQL data directory (first launch only)
+  # --initialize-insecure sets an empty root password, simplifying first-run automation.
+  # Skipped on subsequent runs because the stat check above will be True.
+  ansible.builtin.command:
+    cmd: mysqld --initialize-insecure --user=mysql --datadir={{ mysql_datadir }}
+  when: not mysql_data_initialized.stat.exists
+
+# ─── 4. Service ────────────────────────────────────────────────────────────
+
+- name: Enable and start mysqld service
+  ansible.builtin.service:
+    name: mysqld
+    state: started
+    enabled: true
+
+- name: Wait for mysqld socket to be ready
+  ansible.builtin.wait_for:
+    path: "{{ mysql_socket }}"
+    state: present
+    delay: 2
+    timeout: 60
+
+- name: Set MySQL root password
+  ansible.builtin.shell: |
+    # 1. Try connecting with blank password
+    if mysql -u root -S {{ mysql_socket }} -e "SELECT 1" >/dev/null 2>&1; then
+        mysql -u root -S {{ mysql_socket }} -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}';"
+        exit 0
+    fi
+    # 2. Extract generated temporary password from mysqld.log
+    TEMP_PASS=$(grep -i "temporary password" /var/log/mysqld.log | awk '{print $NF}' | tail -1)
+    if [ -n "$TEMP_PASS" ]; then
+        mysql -u root -p"$TEMP_PASS" --connect-expired-password -S {{ mysql_socket }} \
+          -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}';"
+        exit 0
+    fi
+    # 3. Check if password is already set
+    if mysql -u root -p'{{ mysql_root_password }}' -S {{ mysql_socket }} -e "SELECT 1" >/dev/null 2>&1; then
+        exit 0
+    fi
+    echo "Could not authenticate as root"
+    exit 1
+  when: not mysql_data_initialized.stat.exists  
+
+- name: Wait for mysqld to accept connections on port {{ mysql_port }}
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ mysql_port }}"
+    delay: 3
+    timeout: 60
+
+# ─── 6. Root Client Authentication File ───────────────────────────────────
+
+- name: Deploy root MySQL client credentials file (/root/.my.cnf)
+  ansible.builtin.template:
+    src: root.my.cnf.j2
+    dest: /root/.my.cnf
+    owner: root
+    group: root
+    mode: '0600'
+
+# ─── 7. Database & User Provisioning ──────────────────────────────────────
+
+- name: Create Flask app database (no tables)
+  community.mysql.mysql_db:
+    name: "{{ mysql_db_name }}"
+    state: present
+    login_unix_socket: "{{ mysql_socket }}"
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+
+- name: Check if Flask app database user already exists
+  ansible.builtin.shell: |
+    mysql -u root -p'{{ mysql_root_password }}' -S {{ mysql_socket }} -NBe \
+    "SELECT COUNT(*) FROM mysql.user WHERE user='{{ mysql_app_user }}' AND host='%';"
+  register: flask_user_count
+  changed_when: false
+  no_log: true
+
+- name: Create Flask app database user with remote access
+  # Uses caching_sha2_password explicitly — mysql_native_password was removed in MySQL 8.4.
+  # Idempotent: only runs when user does not already exist.
+  ansible.builtin.shell: |
+    mysql -u root -p'{{ mysql_root_password }}' -S {{ mysql_socket }} -e \
+    "CREATE USER '{{ mysql_app_user }}'@'%' IDENTIFIED WITH caching_sha2_password BY '{{ mysql_app_password }}';
+     GRANT ALL PRIVILEGES ON \`{{ mysql_db_name }}\`.* TO '{{ mysql_app_user }}'@'%';
+     FLUSH PRIVILEGES;"
+  when: flask_user_count.stdout | trim == '0'
+  no_log: true
+
+# ─── 8. Bootstrap Script & Systemd Unit ───────────────────────────────────
+
+- name: Install the data-volume bootstrap script
+  copy:
+    src: mysql-data-bootstrap.sh
+    dest: /usr/local/sbin/mysql-data-bootstrap.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the bootstrap systemd unit
+  copy:
+    src: mysql-data-bootstrap.service
+    dest: /etc/systemd/system/mysql-data-bootstrap.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Ensure rsync is present (used by the seeding step)
+  dnf:
+    name: rsync
+    state: present
+
+- name: Enable the bootstrap unit (runs before mysqld on every boot)
+  systemd:
+    name: mysql-data-bootstrap.service
+    enabled: yes
+    daemon_reload: yes
