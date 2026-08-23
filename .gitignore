@@ -7,3 +7,10 @@ __pycache__/
 .ansible_vault_pass
 *.ansible_vault_pass
 *vault_pass*
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan*
+*tfplan*
+*.bin
+*.zip
