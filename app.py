@@ -44,7 +44,7 @@ def new():
             return redirect(url_for('show_all'))
     return render_template('new.html')
 
+with app.app_context():
+    db.create_all()  # Ensure tables are created within the application context
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()  # Ensure tables are created within the application context
     app.run(debug=True)
