@@ -113,7 +113,8 @@ pipeline {
         '''
       }
     }
-   // end stages
+  } // end stages
+
 
   post {
     success { echo 'Deployment to staging and production complete.' }
