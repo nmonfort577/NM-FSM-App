@@ -108,7 +108,7 @@ pipeline {
           cp -f $SRC/tests/*.tftest.hcl $DST/tests/
           cd $DST
           terraform init -input=false
-          terraform test
+          TF_WORKSPACE=staging terraform test
         '''
       }
     }

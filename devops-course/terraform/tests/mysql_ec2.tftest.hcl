@@ -2,7 +2,6 @@
 # Validates that MySQL EC2 is launched from the correct Golden AMI and properly tagged
 variables {
   aws_region   = "us-east-1"
-  environment  = "test"
   db_instance_type = "t3.micro"
 }
 run "mysql_ec2_uses_golden_ami" {
