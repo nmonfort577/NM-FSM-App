@@ -27,7 +27,7 @@
     // -- Stage 2: Unit & HTTP Tests-------------
     stage('Unit & HTTP Tests') {
       steps {
-       sh 'PYTHONPATH=$WORKSPACE pytest tests/unit/ tests/http/ -v'  
+       sh 'pytest tests/unit/ tests/http/ -v'  
       }
       // pytest.ini auto-injects sqlite:///:memory:
     }
