@@ -6,18 +6,17 @@ variables {
   db_instance_type = "t3.micro"
 }
 run "mysql_ec2_uses_golden_ami" {
-  command = plan          # dry-run only; no real resources
+  command = plan
   assert {
-    condition = aws_instance.mysql_db.ami != ""
-    error_message = "MySQL DB must have an AMI ID"
+    condition     = aws_instance.mysql_db.ami == data.aws_ami.mysql_golden.id
+    error_message = "MySQL EC2 must launch from the Packer Golden AMI, not a hardcoded or stock AMI"
   }
   assert {
-    condition = contains(
-      [data.aws_ami.mysql_golden.tags["BuiltBy"]],
-      "packer")
-    error_message = "AMI must be tagged BuiltBy=packer"
+    condition     = data.aws_ami.mysql_golden.tags["BuiltBy"] == "packer"
+    error_message = "The resolved AMI must be tagged BuiltBy=packer"
   }
 }
+
 run "ebs_volume_has_prevent_destroy" {
   command = plan
   assert {
@@ -25,6 +24,7 @@ run "ebs_volume_has_prevent_destroy" {
     error_message = "EBS data volume must be at least 20 GB"
   }
 }
+
 run "private_subnet_has_correct_cidr" {
   command = plan
   assert {

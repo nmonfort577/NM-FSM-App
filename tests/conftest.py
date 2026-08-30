@@ -1,15 +1,18 @@
-# tests/conftest.py
+﻿# tests/conftest.py
 import pytest
 from app import app, db
 
 @pytest.fixture(scope="function")
 def flask_app():
     """Fresh in-memory SQLite for every test.
-    No cross-test contamination possible."""
+    No cross-test contamination possible - set in
+    pytest.ini."""
     app.config.update({
+        # This turns off Flask's error handling
         "TESTING": True,
-        "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-        "WTF_CSRF_ENABLED": False
+        # pytest.ini already set DATABASE_URL before
+        # app.py was imported so, this is just illustrative
+        "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:"
     })
     with app.app_context():
         db.create_all()
