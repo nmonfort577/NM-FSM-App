@@ -1,4 +1,4 @@
-pipeline {
+ï»¿pipeline {
   agent any
   triggers { pollSCM('* * * * *') }
   environment {
@@ -27,12 +27,12 @@ pipeline {
     // -- Stage 2: Unit & HTTP Tests-------------
     stage('Unit & HTTP Tests') {
       steps {
-        sh 'pytest tests/unit/ tests/http/ -v'
+       sh 'PYTHONPATH=$WORKSPACE pytest tests/unit/ tests/http/ -v'  
       }
-     // pytest.ini auto-injects sqlite:///:memory:
+      // pytest.ini auto-injects sqlite:///:memory:
     }
-    // -- Stage 3: Unit & HTTP Tests-------------
-    stage('IaC Scan — Checkov') {
+    // -- Stage 3: IaC Scan Checkov-------------
+    stage('IaC Scan - Checkov') {
       steps {
         sh '''
           checkov -d $WORKSPACE/devops-course/terraform \
@@ -68,7 +68,7 @@ pipeline {
           packer init .
           packer validate .
           packer build mysql-ami.pkr.hcl
-          # Preserve the build record outside the workspace — cleanWs() wipes it
+          # Preserve the build record outside the workspace â€” cleanWs() wipes it
           cp -f ami_manifest.json /home/ec2-user/NM-FSM-App/devops-course/ami_manifest.json
         '''
         archiveArtifacts artifacts: 'devops-course/ami_manifest.json', allowEmptyArchive: true
@@ -86,10 +86,10 @@ pipeline {
           aws ecr get-login-password --region ${AWS_REGION} | \
             docker login --username AWS --password-stdin ${REGISTRY}
           docker build -t ${REPO_NAME}:${IMAGE_TAG} .
-          # Immutable tag — this is what the pipeline deploys
+          # Immutable tag â€” this is what the pipeline deploys
           docker tag  ${REPO_NAME}:${IMAGE_TAG} ${REPO_URL}:${IMAGE_TAG}
           docker push ${REPO_URL}:${IMAGE_TAG}
-          # Moving tag — keeps :latest current for a manual terraform apply
+          # Moving tag â€” keeps :latest current for a manual terraform apply
           docker tag  ${REPO_NAME}:${IMAGE_TAG} ${REPO_URL}:latest
           docker push ${REPO_URL}:latest
         '''
