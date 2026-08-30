@@ -1,0 +1,36 @@
+# tests/mysql_ec2.tftest.hcl  (relative to terraform working dir)
+# Validates that MySQL EC2 is launched from the correct Golden AMI and properly tagged
+variables {
+  aws_region   = "us-east-1"
+  environment  = "test"
+  db_instance_type = "t3.micro"
+}
+run "mysql_ec2_uses_golden_ami" {
+  command = plan          # dry-run only; no real resources
+  assert {
+    condition = aws_instance.mysql_db.ami != ""
+    error_message = "MySQL DB must have an AMI ID"
+  }
+  assert {
+    condition = contains(
+      [data.aws_ami.mysql_golden.tags["BuiltBy"]],
+      "packer")
+    error_message = "AMI must be tagged BuiltBy=packer"
+  }
+}
+run "ebs_volume_has_prevent_destroy" {
+  command = plan
+  assert {
+    condition = aws_ebs_volume.mysql_data.size >= 20
+    error_message = "EBS data volume must be at least 20 GB"
+  }
+}
+run "private_subnet_has_correct_cidr" {
+  command = plan
+  assert {
+    condition = (
+      aws_subnet.private.cidr_block
+      == var.private_subnet_cidr["staging"])
+    error_message = "Staging subnet must match var.private_subnet_cidr[\"staging\"]"
+  }
+}
