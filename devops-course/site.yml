@@ -9,6 +9,7 @@
       ansible.builtin.command:
         cmd: ansible-galaxy collection install community.mysql
       delegate_to: localhost
+      become: false          # controller-side; installs to ~/.ansible, no sudo needed
       run_once: true
       changed_when: false
   roles:
