@@ -45,6 +45,20 @@
     group: mysql
     mode: '0750'
 
+- name: Ensure /etc/my.cnf includes the drop-in directory
+  # Oracle's MySQL community RPM ships a self-contained /etc/my.cnf with NO
+  # !includedir directive, unlike MariaDB and most distro packages. Without this
+  # line, /etc/my.cnf.d/custom.cnf is deployed and then silently ignored: the
+  # server falls back to datadir=/var/lib/mysql, the EBS data volume is never
+  # used, and lower_case_table_names never takes effect. Must run BEFORE the
+  # initialize step in section 3 so that mysqld --initialize reads custom.cnf.
+  ansible.builtin.lineinfile:
+    path: /etc/my.cnf
+    line: '!includedir /etc/my.cnf.d'
+    state: present
+    insertafter: EOF
+  notify: Restart mysqld
+
 - name: Deploy MySQL server configuration
   ansible.builtin.template:
     src: custom.cnf.j2
@@ -65,6 +79,8 @@
 - name: Initialize MySQL data directory (first launch only)
   # --initialize-insecure sets an empty root password, simplifying first-run automation.
   # Skipped on subsequent runs because the stat check above will be True.
+  # Reads /etc/my.cnf -> !includedir -> custom.cnf, so lower_case_table_names=1
+  # is applied at initialization time, which is the only time it can be set.
   ansible.builtin.command:
     cmd: mysqld --initialize-insecure --user=mysql --datadir={{ mysql_datadir }}
   when: not mysql_data_initialized.stat.exists
@@ -104,7 +120,7 @@
     fi
     echo "Could not authenticate as root"
     exit 1
-  when: not mysql_data_initialized.stat.exists  
+  when: not mysql_data_initialized.stat.exists
 
 - name: Wait for mysqld to accept connections on port {{ mysql_port }}
   ansible.builtin.wait_for:
@@ -152,7 +168,28 @@
   when: flask_user_count.stdout | trim == '0'
   no_log: true
 
-# ─── 8. Bootstrap Script & Systemd Unit ───────────────────────────────────
+# ─── 8. Verify Configuration Actually Took Effect ─────────────────────────
+
+- name: Verify the running server is using the intended datadir
+  # This role used to verify only that custom.cnf was WRITTEN, never that it was
+  # READ. That gap shipped a Golden AMI whose EBS data volume was never touched:
+  # MySQL ran from /var/lib/mysql while the 20 GB volume held an unused datadir.
+  # Fail the Packer build here rather than bake a broken image.
+  # Credentials come from /root/.my.cnf (deployed in section 6), so no secret
+  # appears on the command line and no_log is unnecessary.
+  ansible.builtin.command:
+    cmd: mysql -NBe "SELECT @@datadir;"
+  register: mysql_actual_datadir
+  changed_when: false
+  failed_when: >
+    mysql_actual_datadir.stdout | trim | regex_replace('/$', '')
+    != mysql_datadir | regex_replace('/$', '')
+
+- name: Report the verified datadir
+  ansible.builtin.debug:
+    msg: "MySQL datadir verified: {{ mysql_actual_datadir.stdout | trim }}"
+
+# ─── 9. Bootstrap Script & Systemd Unit ───────────────────────────────────
 
 - name: Install the data-volume bootstrap script
   copy:
