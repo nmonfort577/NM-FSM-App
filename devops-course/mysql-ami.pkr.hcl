@@ -44,7 +44,6 @@ source "amazon-ebs" "mysql" {
   }
   associate_public_ip_address = true
   ami_name                    = local.ami_name
-  ami_description             = "MySQL 8.4 Golden AMI for NM-FSM-App - built by Packer"
   tags = {
     Name      = local.ami_name
     BuiltBy   = "packer"
