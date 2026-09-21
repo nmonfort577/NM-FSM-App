@@ -1,8 +1,10 @@
 from flask import Flask, request, flash, url_for, redirect, render_template
 from flask_sqlalchemy import SQLAlchemy
+import os
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///students.sqlite3'  # Corrected configuration key and file name
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
+    'DATABASE_URL', 'sqlite:///students.sqlite3')  # Corrected configuration key and file name
 app.config['SECRET_KEY'] = "random string"
 db = SQLAlchemy(app)  # Corrected class name
 
