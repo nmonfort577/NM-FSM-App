@@ -1,4 +1,4 @@
-﻿# tests/integration/test_student_db.py
+# tests/integration/test_student_db.py
 # Runs against staging MySQL. DATABASE_URL set by Jenkins.
 import os
 import uuid
@@ -54,3 +54,35 @@ def test_multiple_students(integration_app):
             assert Students.query.filter_by(name=n).first() is not None
     finally:
         cleanup(test_names)
+
+def test_create_and_retrieve_with_major(integration_app):
+    """Insert student with major set, query back and verify major."""
+    test_name = "Integ-%s" % uuid.uuid4().hex[:8]
+    try:
+        s = Students(name=test_name, city="Miami",
+                     addr="1 Main St", pin="33101",
+                     phone="305-555-0000", major="Computer Science")
+        db.session.add(s)
+        db.session.commit()
+        r = Students.query.filter_by(name=test_name).first()
+        assert r is not None
+        assert r.name == test_name
+        assert r.major == "Computer Science"
+    finally:
+        cleanup([test_name])
+
+def test_create_and_retrieve_without_major(integration_app):
+    """Insert student with major omitted (NULL proves old-code compatibility)."""
+    test_name = "Integ-%s" % uuid.uuid4().hex[:8]
+    try:
+        s = Students(name=test_name, city="Miami",
+                     addr="1 Main St", pin="33101",
+                     phone="305-555-0000")
+        db.session.add(s)
+        db.session.commit()
+        r = Students.query.filter_by(name=test_name).first()
+        assert r is not None
+        assert r.name == test_name
+        assert r.major is None
+    finally:
+        cleanup([test_name])
