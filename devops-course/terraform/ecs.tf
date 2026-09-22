@@ -1,4 +1,4 @@
-# ecs.tf
+﻿# ecs.tf
 
 # ECR repository created by staging only, shared across workspaces
 # Production references the same repo via data source below
@@ -65,6 +65,10 @@ resource "aws_ecs_task_definition" "app" {
       {
         name  = "DATABASE_URL"
         value = "mysql+pymysql://${var.db_user}:${var.db_password}@${var.db_ip[terraform.workspace]}/${var.db_name}"
+      },
+      { 
+        name  = "ENABLE_MAJOR_FIELD"
+        value = var.enable_major_field[terraform.workspace] 
       }
     ]
     logConfiguration = {

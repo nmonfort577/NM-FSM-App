@@ -55,3 +55,21 @@ def test_student_delete(flask_app):
     db.session.commit()
     assert Students.query.filter_by(
                name="Dave Test").first() is None
+
+def test_student_major_field(flask_app):
+    """Major field is nullable and can be saved and retrieved."""
+    s1 = Students(name="Eve Default", city="Miami",
+                  addr="5 Palm Ave", pin="33101",
+                  phone="305-555-0005")
+    assert s1.major is None
+
+    s2 = Students(name="Frank Major", city="Tampa",
+                  addr="6 Bay St", pin="33601",
+                  phone="813-555-0006", major="Computer Science")
+    assert s2.major == "Computer Science"
+    db.session.add(s2)
+    db.session.commit()
+
+    retrieved = Students.query.filter_by(name="Frank Major").first()
+    assert retrieved is not None
+    assert retrieved.major == "Computer Science"
